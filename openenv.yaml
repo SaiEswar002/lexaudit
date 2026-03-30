@@ -1,0 +1,76 @@
+name: "LexAudit"
+version: "1.0.0"
+description: "Legal Contract Auditing Environment"
+author: "E.N.V.B.Sai Eswar"
+
+action_space:
+  description: "Actions an agent can take to audit the contract."
+  actions:
+    - name: "flag_risk"
+      description: "Identify risky/unfair clauses in the contract."
+      parameters:
+        target: "The specific risk type (e.g., 'unlimited_confidentiality')."
+    - name: "flag_missing"
+      description: "Detect missing required sections in the contract."
+      parameters:
+        target: "The specific missing section (e.g., 'dispute_resolution')."
+    - name: "flag_contradiction"
+      description: "Find contradicting clauses in the contract."
+      parameters:
+        target: "The specific contradiction (e.g., 'termination_notice_contradiction')."
+    - name: "rewrite_clause"
+      description: "Rewrite an unfair clause fairly."
+      parameters:
+        target: "The clause to rewrite (e.g., 'zero_liability')."
+        content: "The rewritten, fair clause."
+
+observation_space:
+  description: "The current state of the environment."
+  fields:
+    - name: "contract_text"
+      type: "string"
+      description: "The text of the contract to review."
+    - name: "contract_type"
+      type: "string"
+      description: "The type of the contract (NDA, Employment, SaaS)."
+    - name: "task_description"
+      type: "string"
+      description: "Detailed instructions for the current task."
+    - name: "steps_remaining"
+      type: "integer"
+      description: "Number of steps remaining in the episode."
+    - name: "actions_taken"
+      type: "list"
+      description: "List of actions taken so far."
+
+reward_space:
+  description: "Reward given at every step based on the action taken."
+  range: [-0.3, 0.5]
+  details:
+    - "Correct risk flagged: +0.4"
+    - "Correct missing section found: +0.3"
+    - "Correct contradiction found: +0.4"
+    - "Correct rewrite submitted (len > 30 chars): +0.5"
+    - "Wrong target: -0.2"
+    - "Duplicate action: -0.1"
+    - "Error in action: -0.3"
+    - "Unknown action type: -0.2"
+
+tasks:
+  - id: 0
+    name: "NDA Audit"
+    difficulty: "Easy"
+    score_range: [0.0, 1.0]
+  - id: 1
+    name: "Employment Audit"
+    difficulty: "Medium"
+    score_range: [0.0, 1.0]
+  - id: 2
+    name: "SaaS Audit"
+    difficulty: "Hard"
+    score_range: [0.0, 1.0]
+
+endpoints:
+  reset: "/reset"
+  step: "/step"
+  state: "/state"

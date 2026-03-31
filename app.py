@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Any, Dict, Optional
 from env import LexAuditEnv, Action
-from tasks import TASKS, grade_task
+from tasks import TASKS
 
 app = FastAPI(title="LexAudit Environment API")
 
@@ -59,12 +59,23 @@ def get_state(task_id: int = 0):
         return {"error": "Requested task is not the active environment task"}
 
 @app.get("/grade")
-def get_grade(task_id: int = 0):
-    if env_instance.task_id == task_id:
-        score = grade_task(task_id, env_instance.state())
-        return {"task_id": task_id, "score": score}
-    else:
+def grade(task_id: int = 0):
+    from graders import grade_task_detailed
+    if env_instance.task_id != task_id:
         return {"error": "Grade requested for a task that is not currently active"}
+    
+    current_state = env_instance.state()
+    steps = current_state.get("step_count", 0)
+    result = grade_task_detailed(task_id, current_state, steps)
+    
+    return {
+        "task_id": task_id,
+        "score": result["total_score"],
+        "breakdown": result["breakdown"],
+        "feedback": result["feedback"],
+        "difficulty": result["difficulty"],
+        "passed": result["passed"]
+    }
 
 @app.get("/tasks")
 def list_tasks():

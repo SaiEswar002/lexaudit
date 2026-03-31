@@ -3,7 +3,8 @@ from typing import Dict, Any, List, Optional, Tuple
 from pydantic import BaseModel, Field
 
 # We import functions locally to avoid circular imports during script initialization if needed
-from tasks import get_task, grade_task
+from tasks import get_task
+from graders import grade_task
 
 class Observation(BaseModel):
     contract_text: str

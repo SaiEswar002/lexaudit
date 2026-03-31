@@ -6,12 +6,10 @@ from tasks import TASKS
 
 app = FastAPI(title="LexAudit Environment API")
 
-# Store env instances for concurrent users/tasks if needed
-# For simplicity in hackathon, we use a single instance
 env_instance = LexAuditEnv()
 
 class ResetRequest(BaseModel):
-    task_id: int
+    task_id: Optional[int] = 0  # ← default 0, not required
 
 class StepRequest(BaseModel):
     task_id: int
@@ -24,25 +22,23 @@ def health_check():
     return {"status": "ok", "message": "LexAudit Server is running"}
 
 @app.post("/reset")
-def reset_env(req: ResetRequest):
-    if req.task_id not in TASKS:
+def reset_env(req: Optional[ResetRequest] = None):  # ← body is optional
+    task_id = req.task_id if req else 0
+    if task_id not in TASKS:
         raise HTTPException(status_code=404, detail="Task not found")
-    obs = env_instance.reset(req.task_id)
+    obs = env_instance.reset(task_id)
     return obs.model_dump()
 
 @app.post("/step")
 def step_env(req: StepRequest):
     if env_instance.task_id != req.task_id:
-         # Implicit reset if stepping uninitialized or wrong task
-         env_instance.reset(req.task_id)
-         
+        env_instance.reset(req.task_id)
     act = Action(
         action_type=req.action_type,
         target=req.target,
         content=req.content
     )
     obs, reward, done, state = env_instance.step(act)
-    
     return {
         "observation": obs.model_dump(),
         "reward": reward.model_dump(),
@@ -55,7 +51,6 @@ def get_state(task_id: int = 0):
     if env_instance.task_id == task_id:
         return env_instance.state()
     else:
-        # State requested for a task not currently active
         return {"error": "Requested task is not the active environment task"}
 
 @app.get("/grade")
@@ -63,11 +58,9 @@ def grade(task_id: int = 0):
     from graders import grade_task_detailed
     if env_instance.task_id != task_id:
         return {"error": "Grade requested for a task that is not currently active"}
-    
     current_state = env_instance.state()
     steps = current_state.get("step_count", 0)
     result = grade_task_detailed(task_id, current_state, steps)
-    
     return {
         "task_id": task_id,
         "score": result["total_score"],

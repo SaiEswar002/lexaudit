@@ -4,6 +4,10 @@ from typing import Any, Dict, Optional
 from env import LexAuditEnv, Action
 from tasks import TASKS
 
+# server/app.py
+# Entry point for OpenEnv multi-mode deployment
+from app import app
+
 app = FastAPI(title="LexAudit Environment API")
 
 env_instance = LexAuditEnv()

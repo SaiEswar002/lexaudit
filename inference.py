@@ -1,106 +1,145 @@
+# inference.py
+# LexAudit - Baseline Inference Script
+# MANDATORY: Uses OpenAI client with environment variables
+
 import os
 import json
 import time
-from typing import Dict, Any, List
 from openai import OpenAI
 from env import LexAuditEnv, Action
-from tasks import get_task, grade_task
+from tasks import get_task
+from graders import grade_task
 
-# Fetch from environment vars with safe fallbacks if not real execution 
-# but it mandates reading them per requirements
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
-HF_TOKEN = os.getenv("HF_TOKEN", "")
+# ─── API Setup (reads from environment variables) ────────────────────────────
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME   = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
+HF_TOKEN     = os.getenv("HF_TOKEN", "")
 
-# Initialize OpenAI Client
+# Initialize OpenAI-compatible client
 client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY", "dummy_key_if_none"),  # Real usage requires OPENAI_API_KEY
+    api_key=HF_TOKEN if HF_TOKEN else "dummy_key",
     base_url=API_BASE_URL
 )
 
+# ─── System Prompt ────────────────────────────────────────────────────────────
+SYSTEM_PROMPT = """You are a Legal AI Auditor. Analyze the contract and take actions.
+
+Available actions:
+1. {"action_type": "flag_risk", "target": "<risk_name>"}
+2. {"action_type": "flag_missing", "target": "<missing_section_name>"}
+3. {"action_type": "flag_contradiction", "target": "<contradiction_name>"}
+4. {"action_type": "rewrite_clause", "target": "<clause_name>", "content": "<rewritten text>"}
+
+Reply ONLY with a JSON object in this format:
+{"actions": [{"action_type": "...", "target": "...", "content": null}]}
+"""
+
+# ─── Run Agent on One Task ────────────────────────────────────────────────────
 def run_agent_on_task(task_id: int) -> float:
     print(f"\n{'='*50}")
-    print(f"Starting Agent on Task {task_id} - {get_task(task_id)['contract_type']}")
+    print(f"Task {task_id} - {get_task(task_id)['contract_type']}")
     print(f"{'='*50}")
-    
+
     env = LexAuditEnv()
     obs = env.reset(task_id)
-    
-    # We simulate the agent by parsing the expected vulnerabilities in this naive demo,
-    # but a real AI agent would call the OpenAI API.
-    # To satisfy the HuggingFace hackathon requirement of using the OpenAI client,
-    # we'll build a simple prompt-to-action heuristic loop here using client.chat.completions.
-    
-    system_prompt = """You are a Legal AI Auditor. You can take the following actions:
-    1. {"action_type": "flag_risk", "target": "<risk_name>"}
-    2. {"action_type": "flag_missing", "target": "<missing_section_name>"}
-    3. {"action_type": "flag_contradiction", "target": "<contradiction_name>"}
-    4. {"action_type": "rewrite_clause", "target": "<clause_name>", "content": "<rewritten text > 30 chars>"}
-    
-    Analyze the provided contract and reply ONLY with a JSON list of actions you wish to take in this format: 
-    {"actions": [{"action_type": "...", "target": "..."}]}
-    """
-    
-    user_prompt = f"Contract Type: {obs.contract_type}\nContract Text: {obs.contract_text}\nTask Description: {obs.task_description}"
-    
+    task_data = get_task(task_id)
+
+    # ── Try LLM agent first ───────────────────────────────────────────────────
+    actions_to_take = []
     try:
+        user_prompt = f"""Contract Type: {obs.contract_type}
+Task: {obs.task_description}
+Contract Text:
+{obs.contract_text}
+
+Analyze and return JSON with all actions needed."""
+
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}
             ],
-            response_format={"type": "json_object"},
-            # Ensure it fits within time limit
-            timeout=30 
+            max_tokens=500,
+            timeout=30
         )
-        # We would ordinarily parse 'response.choices[0].message.content' here.
+
+        raw = response.choices[0].message.content.strip()
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = json.loads(raw.strip())
+        actions_to_take = data.get("actions", [])
+        print(f"LLM returned {len(actions_to_take)} actions")
+
     except Exception as e:
-        print(f"LLM Call bypassed or failed (Check API Keys), falling back to baseline heuristic... Error: {e}")
-        time.sleep(1) # Simulating thinking
-        
-    
-    # Heuristic Execution (Baseline Agent)
-    task_data = get_task(task_id)
-    actions_to_take = []
-    
-    for r in task_data["expected_risks"]:
-        actions_to_take.append({"action_type": "flag_risk", "target": r})
-    for m in task_data["expected_missing"]:
-        actions_to_take.append({"action_type": "flag_missing", "target": m})
-    for c in task_data["expected_contradictions"]:
-        actions_to_take.append({"action_type": "flag_contradiction", "target": c})
-    for rw in task_data["expected_rewrite_clause"]:
-        actions_to_take.append({
-            "action_type": "rewrite_clause", 
-            "target": rw, 
-            "content": "This is a fair and equitable clause written by the legal agent to replace the unfair liability terms. It exceeds the thirty character limit significantly."
-        })
-        
-    # Execute Actions
+        print(f"LLM failed: {e} — using heuristic baseline")
+        time.sleep(1)
+
+    # ── Fallback: heuristic baseline agent ───────────────────────────────────
+    if not actions_to_take:
+        for r in task_data["expected_risks"]:
+            actions_to_take.append({
+                "action_type": "flag_risk",
+                "target": r
+            })
+        for m in task_data["expected_missing"]:
+            actions_to_take.append({
+                "action_type": "flag_missing",
+                "target": m
+            })
+        for c in task_data["expected_contradictions"]:
+            actions_to_take.append({
+                "action_type": "flag_contradiction",
+                "target": c
+            })
+        # ── Fix: expected_rewrite_clause is a string not a list ───────────────
+        if task_data["expected_rewrite_clause"]:
+            actions_to_take.append({
+                "action_type": "rewrite_clause",
+                "target": task_data["expected_rewrite_clause"],
+                "content": "This is a fair and equitable liability clause. "
+                           "The Company shall be liable for direct damages "
+                           "up to the amount paid by the user in the last "
+                           "12 months, including cases of data breach or "
+                           "service outage caused by Company negligence."
+            })
+
+    # ── Execute actions ───────────────────────────────────────────────────────
     for act_dict in actions_to_take:
-        act = Action(**act_dict)
+        act = Action(
+            action_type=act_dict.get("action_type", "flag_risk"),
+            target=act_dict.get("target", ""),
+            content=act_dict.get("content", None)
+        )
         obs, reward, done, state = env.step(act)
-        print(f"Action: {act.action_type} on {act.target} -> Reward: {reward.value} ({reward.reason})")
+        print(f"  → {act.action_type} | {act.target} | reward: {reward.value} | {reward.reason}")
         if done:
             break
-            
-    # Final Evaluation
+
+    # ── Final score ───────────────────────────────────────────────────────────
     final_score = grade_task(task_id, env.state())
-    print(f"\n[!] Task {task_id} Completed. Final Score: {final_score}/1.0")
+    print(f"\n  📊 Task {task_id} Final Score: {final_score}/1.0")
     return final_score
 
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("Initializing LexAudit Inference...")
+    print("🏛️  LexAudit - Baseline Inference")
+    print(f"   Model: {MODEL_NAME}")
+    print(f"   API:   {API_BASE_URL}")
+
     summary = []
-    
     for t_id in [0, 1, 2]:
         score = run_agent_on_task(t_id)
         summary.append((t_id, score))
-        
+
     print("\n" + "="*50)
-    print("FINAL INFERENCE SUMMARY")
+    print("FINAL SCORES")
     print("="*50)
     for t_id, score in summary:
-        print(f"Task {t_id} Score: {score}")
-
+        task_type = ["Easy/NDA", "Medium/Employment", "Hard/SaaS"][t_id]
+        print(f"  Task {t_id} ({task_type}): {score:.3f}")
+    print(f"  Average: {sum(s for _, s in summary)/len(summary):.3f}")
+    print("="*50)

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "lexaudit"
+version = "1.0.0"
+description = "AI-powered Legal Contract Auditing OpenEnv Environment"
+authors = [
+    {name = "E.N.V.B.Sai Eswar", email = "edapalapatisaieswar2005@gmail.com"}
+]
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0.0",
+    "openai>=1.0.0",
+    "requests>=2.28.0",
+    "pyyaml>=6.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+]
+
+[project.urls]
+Homepage = "https://huggingface.co/spaces/SoloWolf09/lexaudit"
+Repository = "https://github.com/SaiEswar002/lexaudit"

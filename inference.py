@@ -13,7 +13,7 @@ from graders import grade_task
 # ─── API Setup (reads from environment variables) ────────────────────────────
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
-HF_TOKEN     = os.getenv("HF_TOKEN", "")
+HF_TOKEN     = os.getenv("HF_TOKEN")  # ← NO default value!
 
 # Initialize OpenAI-compatible client
 client = OpenAI(
@@ -36,9 +36,8 @@ Reply ONLY with a JSON object in this format:
 
 # ─── Run Agent on One Task ────────────────────────────────────────────────────
 def run_agent_on_task(task_id: int) -> float:
-    print(f"\n{'='*50}")
-    print(f"Task {task_id} - {get_task(task_id)['contract_type']}")
-    print(f"{'='*50}")
+    # ── [START] log format required by hackathon ──────────────────────────────
+    print(f"[START] task_id={task_id}")
 
     env = LexAuditEnv()
     obs = env.reset(task_id)
@@ -94,7 +93,6 @@ Analyze and return JSON with all actions needed."""
                 "action_type": "flag_contradiction",
                 "target": c
             })
-        # ── Fix: expected_rewrite_clause is a string not a list ───────────────
         if task_data["expected_rewrite_clause"]:
             actions_to_take.append({
                 "action_type": "rewrite_clause",
@@ -114,21 +112,27 @@ Analyze and return JSON with all actions needed."""
             content=act_dict.get("content", None)
         )
         obs, reward, done, state = env.step(act)
-        print(f"  → {act.action_type} | {act.target} | reward: {reward.value} | {reward.reason}")
+
+        # ── [STEP] log format required by hackathon ───────────────────────────
+        print(f"[STEP] action={act.action_type} target={act.target} reward={reward.value}")
+
         if done:
             break
 
     # ── Final score ───────────────────────────────────────────────────────────
     final_score = grade_task(task_id, env.state())
-    print(f"\n  📊 Task {task_id} Final Score: {final_score}/1.0")
+
+    # ── [END] log format required by hackathon ────────────────────────────────
+    print(f"[END] task_id={task_id} score={final_score:.3f}")
+
     return final_score
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("🏛️  LexAudit - Baseline Inference")
-    print(f"   Model: {MODEL_NAME}")
-    print(f"   API:   {API_BASE_URL}")
+    print("LexAudit - Baseline Inference")
+    print(f"Model: {MODEL_NAME}")
+    print(f"API: {API_BASE_URL}")
 
     summary = []
     for t_id in [0, 1, 2]:
@@ -140,6 +144,6 @@ if __name__ == "__main__":
     print("="*50)
     for t_id, score in summary:
         task_type = ["Easy/NDA", "Medium/Employment", "Hard/SaaS"][t_id]
-        print(f"  Task {t_id} ({task_type}): {score:.3f}")
-    print(f"  Average: {sum(s for _, s in summary)/len(summary):.3f}")
+        print(f"Task {t_id} ({task_type}): {score:.3f}")
+    print(f"Average: {sum(s for _, s in summary)/len(summary):.3f}")
     print("="*50)

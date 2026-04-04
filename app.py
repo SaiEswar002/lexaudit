@@ -2,12 +2,21 @@
 # LexAudit - FastAPI Server
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from env import LexAuditEnv, Action
 from tasks import TASKS
 
 app = FastAPI(title="LexAudit Environment API")
+
+# Allow Gradio UI (port 7861) to communicate with FastAPI (port 7860)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Single environment instance
 env_instance = LexAuditEnv()

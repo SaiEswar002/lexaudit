@@ -34,7 +34,7 @@ class StepRequest(BaseModel):
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
-@app.get("/")
+@app.get("/health")
 def health_check():
     return {"status": "ok", "message": "LexAudit Server is running"}
 

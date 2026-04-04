@@ -1,6 +1,6 @@
 # gradio_ui.py
 # LexAudit - Gradio Dashboard UI
-# Runs on port 7861, communicates with FastAPI on port 7860
+# Mounted on FastAPI via gr.mount_gradio_app; both run on port 7860
 
 import gradio as gr
 import requests
@@ -831,8 +831,7 @@ with gr.Blocks(
     gr.HTML("""
     <div style="text-align:center; padding:20px 0 8px; color:#334155; font-size:12px; font-family:'Inter',sans-serif;">
       ⚖️ LexAudit · Built for the Meta × Scaler OpenEnv Hackathon ·
-      <span style="color:#4338ca;">FastAPI :7860</span> &nbsp;|&nbsp;
-      <span style="color:#7c3aed;">Gradio UI :7861</span>
+      <span style="color:#4338ca;">FastAPI + Gradio :7860</span>
     </div>
     """)
 
@@ -840,4 +839,4 @@ with gr.Blocks(
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    demo.launch(server_port=7861, share=False)
+    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)

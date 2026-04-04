@@ -2,7 +2,6 @@ import copy
 from typing import Dict, Any, List, Optional, Tuple
 from pydantic import BaseModel, Field
 
-# We import functions locally to avoid circular imports during script initialization if needed
 from tasks import get_task
 from graders import grade_task
 
@@ -37,7 +36,6 @@ class LexAuditEnv:
         self.task_data = get_task(task_id)
         self.actions_history = []
         self._done = False
-        
         return self._get_observation()
         
     def _get_observation(self) -> Observation:
@@ -56,13 +54,11 @@ class LexAuditEnv:
         reward_value = 0.0
         reason = ""
         
-        # Check for unknown action type
         valid_actions = ["flag_risk", "flag_missing", "flag_contradiction", "rewrite_clause"]
         if action.action_type not in valid_actions:
             reward_value = -0.2
             reason = f"Unknown action type: {action.action_type}"
         else:
-            # Check for duplicate action
             is_duplicate = False
             for prev_act in self.actions_history:
                 if prev_act["action_type"] == action.action_type and prev_act["target"] == action.target:
@@ -73,7 +69,6 @@ class LexAuditEnv:
                 reward_value = -0.1
                 reason = "Duplicate action on the same target"
             else:
-                # Process valid actions
                 if action.action_type == "flag_risk":
                     if action.target in self.task_data["expected_risks"]:
                         reward_value = 0.4
@@ -99,7 +94,9 @@ class LexAuditEnv:
                         reason = f"Wrong target for contradiction: {action.target}"
                         
                 elif action.action_type == "rewrite_clause":
-                    if action.target in self.task_data["expected_rewrite_clause"]:
+                    # ✅ FIXED: safe None check — avoids crash on Task 0 & Task 1
+                    expected_rw = self.task_data.get("expected_rewrite_clause")
+                    if expected_rw and action.target == expected_rw:
                         if action.content and len(action.content) > 30:
                             reward_value = 0.5
                             reason = f"Correct rewrite submitted for: {action.target}"
@@ -110,7 +107,6 @@ class LexAuditEnv:
                         reward_value = -0.2
                         reason = f"Wrong target for rewrite: {action.target}"
         
-        # Record action in history whether it was right or wrong
         act_dict = action.model_dump()
         act_dict["reward"] = reward_value
         act_dict["reason"] = reason
